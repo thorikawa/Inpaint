@@ -14,9 +14,7 @@ Inpaint::Inpaint(const Mat& src, const Mat& mask)
 
 	srcImg.push_back(src.clone());
 	originMask = mask.clone();
-	//maskImg_SourceToTarget.push_back(mask.clone());
 	//mask_st.push_back(BulidMask(mask));
-	offsetMap_SourceToTarget.push_back(Mat(src.size(), CV_32FC3, Scalar::all(0)));
 	offsetMap_TargetToSource.push_back(Mat(src.size(), CV_32FC3, Scalar::all(0)));
 	BulidSimilarity();
 	//test
@@ -106,7 +104,6 @@ void Inpaint::BuildPyr()
 
 	buildPyramid(srcImg.front(), srcImg, level);
 	buildPyramid(maskImg.front(), maskImg, PryLevel);
-	buildPyramid(offsetMap_SourceToTarget.front(), offsetMap_SourceToTarget, level);
 	buildPyramid(offsetMap_TargetToSource.front(), offsetMap_TargetToSource, level);
 
 	// Bulid MaskedImage pyr
@@ -156,24 +153,22 @@ void Inpaint::Run()
 	vector<Mat>::iterator maskItEnd = maskImg.end() - 1;
 	//vector<Mask>::iterator maskItBg = mask_st.begin();
 	//vector<Mask>::iterator maskItEnd = mask_st.end() - 1;
-	vector<Mat>::iterator offsetMapBg_SourceToTarget = offsetMap_SourceToTarget.begin();
-	vector<Mat>::iterator offsetMapEnd_SourceToTarget = offsetMap_SourceToTarget.end()-1;
 	vector<Mat>::iterator offsetMapBg_TargetToSource = offsetMap_TargetToSource.begin();
 	vector<Mat>::iterator offsetMapEnd_TargetToSource = offsetMap_TargetToSource.end()-1;
 
 	Mat tempImg;
 	int index = srcImg.size() - 1;
-	for (; maskImageEnd >= maskImageBg+1; maskImageEnd--, offsetMapEnd_SourceToTarget--, offsetMapEnd_TargetToSource--, maskItEnd--, index--)
+	for (; maskImageEnd >= maskImageBg+1; maskImageEnd--, offsetMapEnd_TargetToSource--, maskItEnd--, index--)
 	{
 		MaskedImage src = *maskImageEnd;
 		
 		Mat offset_TargetToSource = *offsetMapEnd_TargetToSource;
-		Mat offset_SourceToTarget = *offsetMapEnd_SourceToTarget;
 
-		cout << "Pry " << index << endl;
+		cout << "Pry " << index << ":" << "w=" << src.row << endl;
 		if (maskImageEnd == maskedImage.end() - 1)
 		{
-			// Initialize offsetmap with random values
+			cout << "##first" << endl;
+ 			// Initialize offsetmap with random values
 			target = src.copy();
 			for (int i = 0; i < target.row; i++)
 				for (int j = 0; j < target.col; j++)
@@ -181,16 +176,19 @@ void Inpaint::Run()
 			
 			//PrintMaskValue(target.mask);
 			
-			RandomizeOffsetMap(src, target, offset_SourceToTarget);
 			RandomizeOffsetMap(target, src, offset_TargetToSource);
-
-			//PrintOffsetMap(*(offsetMapEnd_SourceToTarget));
 		}
 		else
 		{	
+			cout << "##else" << endl;
 #ifdef SHOW_INTERMEDIATE
+			cout << target.img.cols << ":" << target.img.rows << endl;
 			resize(target.img, tempImg, Size((*maskImageBg).col, (*maskImageBg).row));
-			imshow("Pry " + index, tempImg);
+			imshow("Target " + to_string(index), tempImg);
+
+			resize(src.img, tempImg, Size((*maskImageBg).col, (*maskImageBg).row));
+			imshow("Src " + to_string(index), tempImg);
+
 			waitKey();
 #endif
 			//resize(target.img, target.img, Size(src.col, src.row));
@@ -203,28 +201,24 @@ void Inpaint::Run()
 			/*for (int i = 0; i < target.row; i++)
 				for (int j = 0; j < target.col; j++)
 					target.SetMask(i, j, 0);*/
-#ifdef MY_DEBUG
+//#ifdef MY_DEBUG
 			
-			PrintMaskValue(target.mask);
-#endif
+			//PrintMaskValue(target.mask);
+//#endif
 			
 			// Initialize offsetmap with the small offsetmap
-			InitOffsetMap(src, target, *(offsetMapEnd_SourceToTarget+1), offset_SourceToTarget);
 			InitOffsetMap(target, src, *(offsetMapEnd_TargetToSource+1), offset_TargetToSource);
-#ifdef MY_DEBUG
-			PrintOffsetMap(*(offsetMapEnd_SourceToTarget));
-#endif
 		}
 
 		//EM-like
-		ExpectationMaximization(src, target, offset_SourceToTarget, offset_TargetToSource, index);
+		ExpectationMaximization(src, target, offset_TargetToSource, index);
 		if (maskImageEnd == maskImageBg)
 		{
 			cout << "ok in here" << endl;
 			break;
 		}
 	}
-	imshow("Pry " + index, target.img);
+	imshow("Pry " + to_string(index), target.img);
 	cout << "END!!!" << endl;
 	waitKey();
 }
@@ -323,7 +317,7 @@ void Inpaint::InitOffsetDis(const MaskedImage& src, const MaskedImage& target, M
 	//PrintOffsetMap(offset);
 }
 
-void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat& offset_SourceToTarget, Mat& offset_TargetToSource, int level)
+void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat& offset_TargetToSource, int level)
 {
 	int iterEM = 1 + 2 * (level-1);
 	int iterNNF = min(7, 1 + level);
@@ -331,10 +325,7 @@ void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat
 	MaskedImage newtarget;
 	for (int i = 0; i < iterEM; i++)
 	{
-		cout << "ITER " << i << endl;
-#ifdef MY_DEBUG
-		PrintOffsetMap(offset_SourceToTarget);
-#endif
+		cout << "ITER EM:" << i << endl;
 		if (newtarget.row != 0)
 		{
 			target = newtarget.copy();
@@ -345,29 +336,17 @@ void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat
 			for (int j = 0; j < src.col; j++)
 				if (!src.ContainsMask(i, j))
 				{
-					offset_SourceToTarget.at<Vec3f>(i, j)[0] = i;
-					offset_SourceToTarget.at<Vec3f>(i, j)[1] = j; 
-					offset_SourceToTarget.at<Vec3f>(i, j)[2] = 0;
-
+					// i,jを中心とするパッチにマスクをふくんでいなければ
 					offset_TargetToSource.at<Vec3f>(i, j)[0] = i;
 					offset_TargetToSource.at<Vec3f>(i, j)[1] = j;
 					offset_TargetToSource.at<Vec3f>(i, j)[2] = 0;
 				}
-#ifdef MY_DEBUG
-		PrintOffsetMap(offset_SourceToTarget);
-#endif
 		// PatchMatch
 		for (int j = 0; j < iterNNF; j++)
 		{
-			Iteration(src, target, offset_SourceToTarget, j);
-#ifdef MY_DEBUG
-			PrintOffsetMap(offset_SourceToTarget);
-#endif
+			cout << "  ITER NNF:" << j << endl;
 			Iteration(target, src, offset_TargetToSource, j);
 		}
-#ifdef MY_DEBUG
-		PrintOffsetMap(offset_SourceToTarget);
-#endif
 		// Form a target image
 		bool upscale = false;
 		MaskedImage newSrc;
@@ -376,6 +355,8 @@ void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat
 			newSrc = maskedImage[level - 1];
 			newtarget = target.Upscale(newSrc.row, newSrc.col);
 			upscale = true;
+			cout << "## upscale" << endl;
+			//level1以上の各iterationの最後
 		}
 		else
 		{
@@ -385,7 +366,6 @@ void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat
 		}
 		// New a vote array
 		Mat vote = Mat(newSrc.img.size(), CV_32FC4, Scalar::all(0));
-		VoteForTarget(src, target, offset_SourceToTarget, true, vote, upscale, newSrc);
 		VoteForTarget(target, src, offset_TargetToSource, false, vote, upscale, newSrc);
 		FormTargetImg(newtarget, vote);
 		//DeleteVoteArray(vote);
@@ -394,14 +374,16 @@ void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat
 	target = newtarget.copy();
 }
 
-void Inpaint::VoteForTarget(const MaskedImage& src, const MaskedImage& tar, const Mat& offset, bool sourceToTarget, Mat vote, bool upscale, const MaskedImage& newsrc)
+void Inpaint::VoteForTarget(const MaskedImage& target, const MaskedImage& src, const Mat& offset, bool sourceTosrcget, Mat vote, bool upscale, const MaskedImage& newtarget)
 {
-	//targetImg = src.clone();
+	//srcgetImg = target.clone();
 
-	for (int i = 0; i < src.row; i++)
-		for (int j = 0; j < src.col; j++)
+	for (int i = 0; i < target.row; i++)
+		for (int j = 0; j < target.col; j++)
 		{
-			int xp = offset.at<Vec3f>(i, j)[0], yp = offset.at<Vec3f>(i, j)[1], dp = offset.at<Vec3f>(i, j)[2];
+			int xp = offset.at<Vec3f>(i, j)[0];
+			int yp = offset.at<Vec3f>(i, j)[1];
+			int dp = offset.at<Vec3f>(i, j)[2];
 
 			double w = similarity[dp];
 
@@ -409,50 +391,52 @@ void Inpaint::VoteForTarget(const MaskedImage& src, const MaskedImage& tar, cons
 			{
 				for (int dy = -(PatchSize / 2); dy <= PatchSize / 2; dy++)
 				{
-					int xs, ys, xt, yt;
-					if (sourceToTarget) 
-						{ xs = i + dx; ys = j + dy;	xt = xp + dx; yt = yp + dy;	}
-					else
-						{ xs = xp + dx; ys = yp + dy; xt = i + dx; yt = j + dy; }
+					int xs = xp + dx;
+					int ys = yp + dy;
+					int xt = i + dx;
+					int yt = j + dy;
 
-					if (xs < 0 || xs >= src.row) continue;
-					if (ys < 0 || ys >= src.col) continue;
-					if (xt < 0 || xt >= src.row) continue;
-					if (yt < 0 || yt >= src.col) continue;
+					if (xs < 0 || xs >= target.row) continue;
+					if (ys < 0 || ys >= target.col) continue;
+					if (xt < 0 || xt >= target.row) continue;
+					if (yt < 0 || yt >= target.col) continue;
 
 					if (upscale)
 					{
-						int nxt = 2 * xt + 1, nxs = 2 * xs + 1, nyt = 2 * yt + 1, nys = 2 * ys + 1;
-						if (2 * xt + 1 >= newsrc.row)
+						int nxt = 2 * xt + 1;
+						int nxs = 2 * xs + 1;
+						int nyt = 2 * yt + 1;
+						int nys = 2 * ys + 1;
+						if (2 * xt + 1 >= newtarget.row)
 						{
 							nxt--;
 						}
-						if (2 * xs + 1 >= newsrc.row)
+						if (2 * xs + 1 >= newtarget.row)
 						{
 							nxs--;
 						}
-						if (2 * ys + 1 >= newsrc.col)
+						if (2 * ys + 1 >= newtarget.col)
 						{
 							nys--;
 						}
-						if (2 * yt + 1 >= newsrc.col)
+						if (2 * yt + 1 >= newtarget.col)
 						{
 							nyt--;
 						}
 						
 						{
-							WeightedCopy(newsrc, 2 * xs, 2 * ys, vote, 2 * xt, 2 * yt, w);
-							//WeightedCopy(newsrc, 2 * xs + 1, 2 * ys, vote, 2 * xt + 1, 2 * yt, w);
-							WeightedCopy(newsrc, nxs, 2 * ys, vote, nxt, 2 * yt, w);
-							//WeightedCopy(newsrc, 2 * xs, 2 * ys + 1, vote, 2 * xt, 2 * yt + 1, w);
-							WeightedCopy(newsrc, 2 * xs, nys, vote, 2 * xt, nyt, w);
-							//WeightedCopy(newsrc, 2 * xs + 1, 2 * ys + 1, vote, 2 * xt + 1, 2 * yt + 1, w);
-							WeightedCopy(newsrc, nxs, nys, vote, nxt, nyt, w);
+							WeightedCopy(newtarget, 2 * xs, 2 * ys, vote, 2 * xt, 2 * yt, w);
+							//WeightedCopy(newtarget, 2 * xs + 1, 2 * ys, vote, 2 * xt + 1, 2 * yt, w);
+							WeightedCopy(newtarget, nxs, 2 * ys, vote, nxt, 2 * yt, w);
+							//WeightedCopy(newtarget, 2 * xs, 2 * ys + 1, vote, 2 * xt, 2 * yt + 1, w);
+							WeightedCopy(newtarget, 2 * xs, nys, vote, 2 * xt, nyt, w);
+							//WeightedCopy(newtarget, 2 * xs + 1, 2 * ys + 1, vote, 2 * xt + 1, 2 * yt + 1, w);
+							WeightedCopy(newtarget, nxs, nys, vote, nxt, nyt, w);
 						}
 						
 					}
 					else 
-						WeightedCopy(newsrc, xs, ys, vote, xt, yt, w);
+						WeightedCopy(newtarget, xs, ys, vote, xt, yt, w);
 				}
 			}
 		}
@@ -732,6 +716,8 @@ void Inpaint::RandomSearch(const MaskedImage& src, const MaskedImage& tar, Mat& 
 {
 	int w = max(src.col, src.row);
 	
+	// wを半分にしつつ-w〜wの範囲で何回かサーちする
+	// 近くほどピックアップされる確率が高くなる
 	while (w > 0)
 	{
 		int x = rand() % (2 * w) - w + row;

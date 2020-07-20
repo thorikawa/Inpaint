@@ -10,7 +10,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 //#define MY_DEBUG
-//#define SHOW_INTERMEDIATE
+#define SHOW_INTERMEDIATE
 using namespace cv;
 using namespace std;
 
@@ -135,7 +135,7 @@ private :
 	void RandomizeOffsetMap(const MaskedImage& src, const MaskedImage& target, Mat& offset);
 	void InitOffsetMap(const MaskedImage& src, const MaskedImage& target, const Mat& preOff, Mat& offset);
 	void InitOffsetDis(const MaskedImage& src, const MaskedImage& target, Mat& offset);
-	void ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat& offset_SourceToTarget, Mat& offset_TargetToSource, int level);
+	void ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat& offset_TargetToSource, int level);
 	Mat GetPatch(const Mat &Src, int row, int col);
 	int Distance(const Mat &Dst, const Mat &Src);
 	int Distance(const MaskedImage &Src, int xs, int ys, const MaskedImage &Dst, int xt, int yt);
