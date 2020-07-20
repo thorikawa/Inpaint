@@ -368,7 +368,6 @@ void Inpaint::ExpectationMaximization(MaskedImage& src, MaskedImage& target, Mat
 		Mat vote = Mat(newSrc.img.size(), CV_32FC4, Scalar::all(0));
 		VoteForTarget(target, src, offset_TargetToSource, false, vote, upscale, newSrc);
 		FormTargetImg(newtarget, vote);
-		//DeleteVoteArray(vote);
 	}
 
 	target = newtarget.copy();
@@ -393,6 +392,8 @@ void Inpaint::VoteForTarget(const MaskedImage& target, const MaskedImage& src, c
 				{
 					int xs = xp + dx;
 					int ys = yp + dy;
+
+					// xtとytが全てを網羅
 					int xt = i + dx;
 					int yt = j + dy;
 
@@ -465,42 +466,6 @@ void Inpaint::FormTargetImg(MaskedImage& target, Mat vote)
 			}
 		}
 	}
-}
-
-double*** Inpaint::NewVoteArray(int rows, int cols)
-{
-	double ***vote = new double**[rows];
-	for (int k = 0; k < rows; k++)
-		*(vote + k) = new double*[cols];
-	for (int k = 0; k < rows; k++)
-		for (int l = 0; l < cols; l++)
-		{
-			*(*(vote + k) + l) = new double[4];
-			for (int m = 0; m < 4; m++)
-				vote[k][l][m] = 0;
-		}
-
-	return vote;
-}
-
-void DeleteVoteArray(int*** vote)
-{
-	delete[] vote;
-}
-
-Mat Inpaint::GetPatch(const Mat &Src, int row, int col)
-{
-	int row_begin = row - (PatchSize / 2) >= 0 ? row - (PatchSize / 2) : 0;
-	int row_end =
-		row + (PatchSize / 2) <= Src.rows - 1 ?
-		row + (PatchSize / 2) : Src.rows - 1;
-
-	int col_begin = col - (PatchSize / 2) >= 0 ? col - (PatchSize / 2) : 0;
-	int col_end =
-		col + (PatchSize / 2) <= Src.cols - 1 ?
-		col + (PatchSize / 2) : Src.cols - 1;
-
-	return Src(Range(row_begin, row_end + 1), Range(col_begin, col_end + 1));
 }
 
 int Inpaint::Distance(const Mat &Dst, const Mat &Src)
@@ -615,101 +580,6 @@ void Inpaint::Propagation(const MaskedImage& src, const MaskedImage& tar, Mat& o
 		}
 	}
 
-}
-void Inpaint::Propagation_Backup(const Mat& src, Mat& offset, int row, int col, int dir, const Mat& mask)
-{
-	//Mat DstPatch = GetPatch(targetImg, row, col);
-	//Mat SrcPatch = GetPatch(src, offset.at<Vec3f>(row, col)[0], offset.at<Vec3f>(row, col)[1]);
-	//Mat LeftPatch, RightPatch, UpPatch, DownPatch;
-
-	//if (0 == dir % 2)
-	//{
-	//	if (col - 1 >= 0)
-	//		LeftPatch = GetPatch(src, offset.at<Vec3f>(row, col - 1)[0], offset.at<Vec3f>(row, col - 1)[1] + 1);
-	//	if (row - 1 >= 0)
-	//		UpPatch = GetPatch(src, offset.at<Vec3f>(row - 1, col)[0] + 1, offset.at<Vec3f>(row - 1, col)[1] + 1);
-
-	//	int location = GetMinPatch(DstPatch, SrcPatch, LeftPatch, UpPatch);
-
-	//	switch (location)
-	//	{
-	//	case 2:
-	//		offset.at < Vec3f > (row, col)[0] = offset.at < Vec3f > (row, col - 1)[0];
-	//		offset.at < Vec3f > (row, col)[1] = offset.at < Vec3f > (row, col - 1)[1] + 1;
-	//		//offset.at < Vec3f > (row, col)[2] = Distance(src, row, col, targetImg, offset.at < Vec3f > (row, col)[0], offset.at < Vec3f > (row, col)[1], mask);
-	//		break;
-	//	case 3:
-	//		offset.at < Vec3f > (row, col)[0] = offset.at < Vec3f > (row - 1, col)[0] + 1;
-	//		offset.at < Vec3f > (row, col)[1] = offset.at < Vec3f > (row - 1, col)[1];
-	//		//offset.at < Vec3f > (row, col)[2] = Distance(src, row, col, targetImg, offset.at < Vec3f > (row, col)[0], offset.at < Vec3f > (row, col)[1], mask);
-	//		break;
-	//	}
-	//}
-	//else 
-	//{
-	//	if (col + 1 < src.cols)
-	//		RightPatch = GetPatch(src, offset.at<Vec3f>(row, col + 1)[0], offset.at<Vec3f>(row, col + 1)[1] - 1);
-	//	if (row + 1 < src.rows)
-	//		DownPatch = GetPatch(src, offset.at<Vec3f>(row + 1, col)[0] - 1, offset.at<Vec3f>(row + 1, col)[1] - 1);
-
-	//	int location = GetMinPatch(DstPatch, SrcPatch, RightPatch, DownPatch);
-
-	//	switch (location)
-	//	{
-	//	case 2:
-	//		offset.at < Vec3f > (row, col)[0] = offset.at < Vec3f > (row, col + 1)[0];
-	//		offset.at < Vec3f > (row, col)[1] = offset.at < Vec3f > (row, col + 1)[1] - 1;
-	//		//offset.at < Vec3f > (row, col)[2] = Distance(src, row, col, targetImg, offset.at < Vec3f > (row, col)[0], offset.at < Vec3f > (row, col)[1], mask);
-	//		break;
-	//	case 3:
-	//		offset.at < Vec3f > (row, col)[0] = offset.at < Vec3f > (row + 1, col)[0] - 1;
-	//		offset.at < Vec3f > (row, col)[1] = offset.at < Vec3f > (row + 1, col)[1];
-	//		//offset.at < Vec3f > (row, col)[2] = Distance(src, row, col, targetImg, offset.at < Vec3f > (row, col)[0], offset.at < Vec3f > (row, col)[1], mask);
-	//		break;
-	//	}
-	//}
-}
-
-int Inpaint::GetMinPatch(const Mat& src, const Mat& one, const Mat& two, const Mat& three)
-{
-	int dis1 = Distance(src, one);
-	int dis2 = Distance(src, two);
-	int dis3 = Distance(src, three);
-
-	if (dis1 <= dis2 && dis1 <= dis3)
-		return 1;
-
-	if (dis2 <= dis1 && dis2 <= dis3)
-		return 2;
-
-	return 3;
-}
-
-void Inpaint::RandomSearch_Backup(const Mat& src, Mat& offset, int row, int col, const Mat& mask)
-{
-	//Mat DstPatch = GetPatch(targetImg, row, col);
-	//Mat SrcPatch = GetPatch(src, offset.at<Vec3f>(row, col)[0], offset.at<Vec3f>(row, col)[1]);
-
-	//int w = min(src.cols, src.rows);
-	//
-	//while (w > 0)
-	//{
-	//	int x = rand() % w;
-	//	int y = rand() % w;
-
-	//	Mat candidate = GetPatch(src, x, y);
-
-	//	int dis1 = Distance(SrcPatch, DstPatch);
-	//	int dis2 = Distance(SrcPatch, candidate);
-
-	//	if (dis2 < dis1)
-	//	{
-	//		offset.at < Vec3f > (row, col)[0] = x;
-	//		offset.at < Vec3f > (row, col)[1] = y;
-	//		//offset.at < Vec3f > (row, col)[2] = Distance(src, row, col, targetImg, offset.at < Vec3f > (row, col)[0], offset.at < Vec3f > (row, col)[1], mask);
-	//	}
-	//	w /= 2;
-	//}
 }
 
 void Inpaint::RandomSearch(const MaskedImage& src, const MaskedImage& tar, Mat& offset, int row, int col)
